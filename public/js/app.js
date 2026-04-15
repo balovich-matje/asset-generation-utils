@@ -88,8 +88,12 @@ const App = (() => {
 
     function selectProject(id) {
         currentProject = projects.find(p => p.id === id) || null;
+        const delBtn = document.getElementById('delete-project-btn');
         if (currentProject) {
             setStatus(`Project: ${currentProject.displayName}`);
+            delBtn.classList.remove('hidden');
+        } else {
+            delBtn.classList.add('hidden');
         }
         // Notify panels
         if (typeof Generator !== 'undefined') Generator.onProjectChange(currentProject);
@@ -137,6 +141,20 @@ const App = (() => {
             if (e.target.classList.contains('modal')) {
                 e.target.classList.add('hidden');
             }
+        });
+
+        // Delete project
+        document.getElementById('delete-project-btn').addEventListener('click', async () => {
+            if (!currentProject) return;
+            const name = currentProject.displayName || currentProject.name;
+            if (!confirm(`Delete project "${name}"? This cannot be undone.`)) return;
+            await api('DELETE', `/projects/${currentProject.id}`);
+            currentProject = null;
+            await loadProjects();
+            document.getElementById('project-selector').value = '';
+            selectProject('');
+            document.getElementById('delete-project-btn').classList.add('hidden');
+            setStatus(`Deleted: ${name}`);
         });
     }
 

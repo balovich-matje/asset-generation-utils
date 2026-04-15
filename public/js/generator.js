@@ -222,10 +222,15 @@ const Generator = (() => {
             img.src = `/projects/${project.id}/generations/${gen.filename}`;
             img.title = gen.uploaded ? `Uploaded: ${gen.prompt}` : `seed: ${gen.seed}`;
             img.addEventListener('click', () => {
-                if (!gen.uploaded) {
-                    document.getElementById('seed-input').value = gen.seed;
-                    document.getElementById('reuse-seed').checked = true;
-                }
+                // Show in results grid with Approve button
+                const grid = document.getElementById('results-grid');
+                grid.innerHTML = '';
+                const result = {
+                    image: img.src,
+                    seed: gen.seed,
+                    savedPath: `${project.id}/generations/${gen.filename}`
+                };
+                renderResultCard(grid, result, 0);
             });
 
             const delBtn = document.createElement('button');
