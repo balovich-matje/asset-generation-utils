@@ -3,6 +3,7 @@ const router = express.Router();
 const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
+const multer = require('multer');
 
 const projectsDir = path.join(__dirname, '..', '..', 'projects');
 
@@ -109,6 +110,78 @@ router.delete('/:id', (req, res) => {
     const trashDir = path.join(projectsDir, `.trash_${req.params.id}_${Date.now()}`);
     fs.renameSync(dir, trashDir);
     res.json({ success: true });
+});
+
+// DELETE /api/projects/:id/generations/:filename — delete a specific generation
+router.delete('/:id/generations/:filename', (req, res) => {
+    const project = readProject(req.params.id);
+    if (!project) {
+        return res.status(404).json({ error: 'Project not found' });
+    }
+
+    const filePath = path.join(getProjectPath(req.params.id), 'generations', req.params.filename);
+    if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+    }
+
+    // Remove from generations list
+    project.generations = project.generations.filter(g => g.filename !== req.params.filename);
+
+    // Clear approved sprite if it pointed to this file
+    if (project.approvedSprite && project.approvedSprite.includes(req.params.filename)) {
+        project.approvedSprite = null;
+        project.approvedImage = null;
+    }
+
+    project.updatedAt = new Date().toISOString();
+    writeProject(project);
+    res.json({ success: true, project });
+});
+
+// POST /api/projects/:id/upload — upload an external sprite image
+const upload = multer({ dest: '/tmp/sprite-forge-uploads/' });
+router.post('/:id/upload', upload.single('sprite'), (req, res) => {
+    const project = readProject(req.params.id);
+    if (!project) {
+        return res.status(404).json({ error: 'Project not found' });
+    }
+
+    if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded. Use field name "sprite".' });
+    }
+
+    const genDir = path.join(getProjectPath(req.params.id), 'generations');
+    fs.mkdirSync(genDir, { recursive: true });
+
+    const ext = path.extname(req.file.originalname) || '.png';
+    const filename = `upload_${Date.now()}${ext}`;
+    const destPath = path.join(genDir, filename);
+
+    // Move from temp to project
+    fs.copyFileSync(req.file.path, destPath);
+    fs.unlinkSync(req.file.path);
+
+    // Add to generations
+    const entry = {
+        id: uuidv4(),
+        filename,
+        seed: 0,
+        prompt: `Uploaded: ${req.file.originalname}`,
+        timestamp: new Date().toISOString(),
+        uploaded: true
+    };
+    project.generations.push(entry);
+    project.updatedAt = new Date().toISOString();
+    writeProject(project);
+
+    // Return base64 for immediate display
+    const imageBuffer = fs.readFileSync(destPath);
+    res.json({
+        success: true,
+        generation: entry,
+        image: `data:image/png;base64,${imageBuffer.toString('base64')}`,
+        savedPath: `${req.params.id}/generations/${filename}`
+    });
 });
 
 module.exports = router;

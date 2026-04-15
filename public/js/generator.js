@@ -38,6 +38,47 @@ const Generator = (() => {
         document.getElementById('edge-cleanup').addEventListener('input', (e) => {
             document.getElementById('edge-cleanup-val').textContent = e.target.value;
         });
+
+        document.getElementById('upload-file').addEventListener('change', uploadSprite);
+    }
+
+    async function uploadSprite(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const project = App.getProject();
+        if (!project) {
+            App.setStatus('Create a project first');
+            return;
+        }
+
+        App.setStatus('Uploading...');
+
+        const formData = new FormData();
+        formData.append('sprite', file);
+
+        try {
+            const res = await fetch(`/api/projects/${project.id}/upload`, {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+
+            // Show in results grid
+            const grid = document.getElementById('results-grid');
+            results.push(data);
+            renderResultCard(grid, data, results.length - 1);
+
+            await App.refreshProject();
+            renderHistory();
+            App.setStatus(`Uploaded: ${file.name}`);
+        } catch (err) {
+            App.setStatus(`Upload error: ${err.message}`);
+        }
+
+        // Reset file input
+        e.target.value = '';
     }
 
     async function generate() {
@@ -173,15 +214,35 @@ const Generator = (() => {
 
         const gens = project.generations.slice().reverse();
         gens.forEach(gen => {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'history-thumb-wrapper';
+
             const img = document.createElement('img');
             img.className = 'history-thumb';
             img.src = `/projects/${project.id}/generations/${gen.filename}`;
-            img.title = `seed: ${gen.seed}`;
+            img.title = gen.uploaded ? `Uploaded: ${gen.prompt}` : `seed: ${gen.seed}`;
             img.addEventListener('click', () => {
-                document.getElementById('seed-input').value = gen.seed;
-                document.getElementById('reuse-seed').checked = true;
+                if (!gen.uploaded) {
+                    document.getElementById('seed-input').value = gen.seed;
+                    document.getElementById('reuse-seed').checked = true;
+                }
             });
-            strip.appendChild(img);
+
+            const delBtn = document.createElement('button');
+            delBtn.className = 'history-delete-btn';
+            delBtn.textContent = '\u00d7';
+            delBtn.title = 'Delete';
+            delBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                await App.api('DELETE', `/projects/${project.id}/generations/${gen.filename}`);
+                await App.refreshProject();
+                renderHistory();
+                App.setStatus('Image deleted');
+            });
+
+            wrapper.appendChild(img);
+            wrapper.appendChild(delBtn);
+            strip.appendChild(wrapper);
         });
     }
 
