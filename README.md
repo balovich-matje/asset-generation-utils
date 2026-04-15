@@ -58,6 +58,26 @@ Edit `config.json` (created on first setup):
 
 Settings are also editable from the UI's Settings panel.
 
+## Workflow
+
+1. **Generate** — Describe a character, pick a style template and Pollinations model, generate 4 variants
+2. **Approve** — Pick the best variant
+3. **Clean BG** — Remove the background with rembg, adjust edge cleanup
+4. **Segment** — Auto-split the sprite into body parts (head, torso, arms, legs), drag cut lines to adjust
+5. **Animate** — Preview animations in a Phaser 3.70 canvas (Idle, Walk, Attack, Hit, Death), tweak parameters, see live tween code
+6. **Export** — Save sprite, body parts, and animation JS to disk or download as ZIP
+
+## Panels
+
+| Panel | Description |
+|-------|-------------|
+| Generate | Text-to-image via Pollinations API (9 free + 9 paid models). 4 variants per generation. |
+| Clean BG | One-click background removal with edge cleanup slider. Before/after toggle. |
+| Segment | Auto-segment into 5 body parts. Draggable cut lines for manual adjustment. |
+| Animate | Phaser 3.70 canvas assembles parts and plays tween animations. 5 presets with adjustable parameters. Live code generation — copy-paste into your game. |
+| Export | Export full sprite, individual parts, and animation code to disk or ZIP. Configurable naming pattern. |
+| Settings | Pollinations API config (model selector with free/paid tiers), custom endpoint, style templates. |
+
 ## REST API
 
 Every UI action has a corresponding API endpoint for headless/AI-driven workflows.
@@ -72,6 +92,10 @@ Every UI action has a corresponding API endpoint for headless/AI-driven workflow
 | `POST` | `/api/generate` | Generate sprite via Pollinations |
 | `POST` | `/api/generate/custom` | Generate via custom endpoint |
 | `POST` | `/api/remove-bg` | Remove background from sprite |
+| `POST` | `/api/segment-parts` | Auto-segment sprite into body parts |
+| `POST` | `/api/segment-parts/manual` | Re-segment with manual cut boundaries |
+| `POST` | `/api/export` | Export assets to disk |
+| `GET` | `/api/export/zip/:id` | Download all exports as ZIP |
 | `GET` | `/api/settings` | Get config (API key redacted) |
 | `GET` | `/api/settings/raw` | Get full config |
 | `PUT` | `/api/settings` | Update config |
@@ -102,20 +126,27 @@ sprite-forge/
     index.js              - Express server
     routes/
       generate.js         - Image generation proxy
-      segment.js          - Background removal
+      segment.js          - BG removal + body part segmentation
       projects.js         - Project CRUD
       settings.js         - Config management
+      export.js           - Export + ZIP download
     scripts/
       remove_bg.py        - rembg background removal
+      segment_parts.py    - Body part segmentation
+      requirements.txt    - Python dependencies
   public/
-    index.html            - UI shell
+    index.html            - UI shell (6 panels)
     css/style.css         - Dark theme
     js/
-      app.js              - Main app logic
-      generator.js        - Generation panel
-      segmenter.js        - BG removal panel
+      app.js              - Main app logic + panel switching
+      generator.js        - Character generation panel
+      segmenter.js        - Background removal panel
+      bodyparts.js        - Body part segmentation panel
+      preview.js          - Phaser 3.70 animation preview
+      exporter.js         - Export panel
   projects/               - Character data + images
-  config.json             - API keys + settings
+  exports/                - Exported assets (gitignored)
+  config.json             - API keys + settings (gitignored)
 ```
 
 ## Development
