@@ -188,7 +188,7 @@ const Preview = (() => {
         }
     }
 
-    function loadParts() {
+    async function loadParts() {
         const project = App.getProject();
         const noParts = document.getElementById('anim-no-parts');
         const workspace = document.getElementById('anim-workspace');
@@ -202,13 +202,21 @@ const Preview = (() => {
         noParts.classList.add('hidden');
         workspace.classList.remove('hidden');
 
-        // Always refresh custom animations list
-        loadCustomAnimations();
+        // Always refresh custom animations list (await so we have them before initGame)
+        await loadCustomAnimations();
 
         // Only reinit Phaser if parts changed
         const newManifest = project.parts;
         if (game && partsManifest === newManifest) return;
         partsManifest = newManifest;
+
+        // For assembled layers, auto-select first custom animation since built-in presets won't work
+        if (partsManifest.assembled && customAnimations.length > 0) {
+            const sel = document.getElementById('anim-preset');
+            sel.value = `custom:${customAnimations[0].name}`;
+            currentPreset = sel.value;
+            currentCustomAnim = customAnimations[0];
+        }
 
         initGame();
         renderParams();
@@ -295,7 +303,10 @@ const Preview = (() => {
         const anchorX = partsManifest.anchorX || 128;
         const anchorY = partsManifest.anchorY || 128;
 
-        const partOrder = ['legs', 'torso', 'left_arm', 'right_arm', 'head'];
+        // Use manifest order — support both standard body parts and custom assembled layers
+        const partOrder = partsManifest.assembled
+            ? Object.keys(partsManifest.parts)
+            : ['legs', 'torso', 'left_arm', 'right_arm', 'head'];
         for (const name of partOrder) {
             const info = partsManifest.parts[name];
             if (!info) continue;
