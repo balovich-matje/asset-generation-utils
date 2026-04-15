@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sprite Forge</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <header class="top-bar">
+        <div class="top-bar-left">
+            <h1 class="logo">Sprite Forge</h1>
+        </div>
+        <div class="top-bar-center">
+            <select id="project-selector" class="project-select">
+                <option value="">-- Select Project --</option>
+            </select>
+            <button id="new-project-btn" class="btn btn-sm">+ New</button>
+        </div>
+        <div class="top-bar-right">
+            <span id="status-text" class="status-text"></span>
+        </div>
+    </header>
+
+    <div class="app-layout">
+        <nav class="sidebar">
+            <button class="nav-btn active" data-panel="generate">
+                <span class="nav-icon">&#9998;</span>
+                Generate
+            </button>
+            <button class="nav-btn" data-panel="bg-remove">
+                <span class="nav-icon">&#9986;</span>
+                Clean BG
+            </button>
+            <button class="nav-btn" data-panel="bodyparts">
+                <span class="nav-icon">&#9000;</span>
+                Segment
+            </button>
+            <button class="nav-btn" data-panel="animation">
+                <span class="nav-icon">&#9654;</span>
+                Animate
+            </button>
+            <button class="nav-btn" data-panel="export">
+                <span class="nav-icon">&#9112;</span>
+                Export
+            </button>
+            <button class="nav-btn" data-panel="settings">
+                <span class="nav-icon">&#9881;</span>
+                Settings
+            </button>
+        </nav>
+
+        <main class="main-content">
+            <!-- Generate Panel -->
+            <section id="panel-generate" class="panel active">
+                <div class="panel-header">
+                    <h2>Character Generator</h2>
+                </div>
+                <div class="generate-controls">
+                    <div class="form-group">
+                        <label for="char-description">Character Description</label>
+                        <textarea id="char-description" rows="3" placeholder="e.g. skeleton warrior with rusty sword"></textarea>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group flex-1">
+                            <label for="style-template">Style Template</label>
+                            <select id="style-template"></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="backend-select">Backend</label>
+                            <select id="backend-select">
+                                <option value="pollinations">Pollinations</option>
+                                <option value="custom">Custom</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="reuse-seed"> Reuse Seed
+                            </label>
+                            <input type="number" id="seed-input" placeholder="Auto" class="seed-input">
+                        </div>
+                        <button id="generate-btn" class="btn btn-primary btn-lg">Generate (x4)</button>
+                    </div>
+                </div>
+
+                <div id="generate-loading" class="loading hidden">
+                    <div class="spinner"></div>
+                    <span>Generating sprites...</span>
+                </div>
+
+                <div id="results-grid" class="results-grid"></div>
+
+                <div class="history-section">
+                    <h3>Generation History</h3>
+                    <div id="history-strip" class="history-strip"></div>
+                </div>
+            </section>
+
+            <!-- Background Removal Panel -->
+            <section id="panel-bg-remove" class="panel">
+                <div class="panel-header">
+                    <h2>Background Removal</h2>
+                </div>
+                <div id="bg-no-sprite" class="empty-state">
+                    <p>No sprite selected. Generate and approve a sprite first.</p>
+                </div>
+                <div id="bg-workspace" class="hidden">
+                    <div class="bg-preview-area">
+                        <div class="preview-container">
+                            <h3 id="bg-view-label">Original</h3>
+                            <div class="sprite-preview checkerboard">
+                                <img id="bg-preview-img" alt="Sprite preview">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-controls">
+                        <div class="form-row">
+                            <button id="remove-bg-btn" class="btn btn-primary">Remove Background</button>
+                            <button id="bg-toggle-btn" class="btn" disabled>Before / After</button>
+                        </div>
+                        <div class="form-group">
+                            <label for="edge-cleanup">Edge Cleanup: <span id="edge-cleanup-val">50</span></label>
+                            <input type="range" id="edge-cleanup" min="0" max="100" value="50">
+                        </div>
+                        <div class="form-row">
+                            <button id="bg-apply-btn" class="btn btn-success" disabled>Apply</button>
+                            <button id="bg-revert-btn" class="btn" disabled>Revert</button>
+                        </div>
+                    </div>
+                    <div id="bg-loading" class="loading hidden">
+                        <div class="spinner"></div>
+                        <span>Removing background...</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Body Part Segmentation Panel -->
+            <section id="panel-bodyparts" class="panel">
+                <div class="panel-header">
+                    <h2>Body Part Segmentation</h2>
+                </div>
+                <div id="bp-no-sprite" class="empty-state">
+                    <p>No background-removed sprite. Run BG removal first.</p>
+                </div>
+                <div id="bp-workspace" class="hidden">
+                    <div class="bp-layout">
+                        <div class="bp-canvas-area">
+                            <div class="bp-sprite-container" id="bp-sprite-container">
+                                <img id="bp-sprite-img" alt="Sprite">
+                                <div id="bp-overlays"></div>
+                                <div class="cut-line cut-line-h" id="cut-headY" title="Head / Torso boundary"></div>
+                                <div class="cut-line cut-line-h" id="cut-torsoBottomY" title="Torso / Legs boundary"></div>
+                                <div class="cut-line cut-line-v" id="cut-armLeftX" title="Left arm boundary"></div>
+                                <div class="cut-line cut-line-v" id="cut-armRightX" title="Right arm boundary"></div>
+                            </div>
+                            <div class="bp-controls">
+                                <button id="bp-auto-btn" class="btn btn-primary">Auto Segment</button>
+                                <button id="bp-resegment-btn" class="btn" disabled>Re-segment</button>
+                            </div>
+                            <div id="bp-loading" class="loading hidden">
+                                <div class="spinner"></div>
+                                <span>Segmenting...</span>
+                            </div>
+                        </div>
+                        <div class="bp-parts-sidebar">
+                            <h3>Parts</h3>
+                            <div id="bp-parts-list" class="bp-parts-list"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Animation Preview Panel -->
+            <section id="panel-animation" class="panel">
+                <div class="panel-header">
+                    <h2>Animation Preview</h2>
+                </div>
+                <div id="anim-no-parts" class="empty-state">
+                    <p>No body parts available. Segment a sprite first.</p>
+                </div>
+                <div id="anim-workspace" class="hidden">
+                    <div class="anim-layout">
+                        <div class="anim-canvas-col">
+                            <div class="anim-canvas-wrapper">
+                                <div id="phaser-container"></div>
+                            </div>
+                            <div class="anim-transport">
+                                <select id="anim-preset">
+                                    <option value="idle">Idle</option>
+                                    <option value="walk">Walk</option>
+                                    <option value="attack">Attack</option>
+                                    <option value="hit">Hit / Flinch</option>
+                                    <option value="death">Death</option>
+                                </select>
+                                <button id="anim-play-btn" class="btn btn-sm btn-primary">Play</button>
+                                <button id="anim-pause-btn" class="btn btn-sm">Pause</button>
+                                <button id="anim-step-btn" class="btn btn-sm">Step</button>
+                                <label class="anim-loop-label">
+                                    <input type="checkbox" id="anim-loop" checked> Loop
+                                </label>
+                            </div>
+                            <div class="form-row" style="margin-top:8px;">
+                                <div class="form-group flex-1">
+                                    <label for="anim-speed">Speed: <span id="anim-speed-val">1.0</span>x</label>
+                                    <input type="range" id="anim-speed" min="1" max="30" value="10" step="1">
+                                </div>
+                                <div class="form-group">
+                                    <label for="anim-bg-color">BG Color</label>
+                                    <input type="color" id="anim-bg-color" value="#1a1a2e">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="anim-params-col">
+                            <h3>Parameters</h3>
+                            <div id="anim-params"></div>
+                            <h3 style="margin-top:16px;">Animation Code</h3>
+                            <div class="code-panel">
+                                <pre id="anim-code" class="code-block"></pre>
+                                <button id="anim-copy-btn" class="btn btn-sm">Copy Code</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Export Panel -->
+            <section id="panel-export" class="panel">
+                <div class="panel-header">
+                    <h2>Export</h2>
+                </div>
+                <div id="export-no-project" class="empty-state">
+                    <p>Select a project to export.</p>
+                </div>
+                <div id="export-workspace" class="hidden">
+                    <div class="export-content">
+                        <div class="form-group">
+                            <label>Project</label>
+                            <div id="export-project-name" class="export-info-value"></div>
+                        </div>
+
+                        <fieldset>
+                            <legend>Export Options</legend>
+                            <div class="export-checks">
+                                <label><input type="checkbox" id="export-sprite" checked> Full sprite (BG removed)</label>
+                                <label><input type="checkbox" id="export-parts" checked> Body parts (individual PNGs)</label>
+                                <label><input type="checkbox" id="export-code" checked> Animation code (.js)</label>
+                            </div>
+                        </fieldset>
+
+                        <div class="form-group">
+                            <label for="export-pattern">Naming Pattern</label>
+                            <input type="text" id="export-pattern" value="{character}_{part}" placeholder="{character}_{part}">
+                            <div class="form-hint">Variables: {character}, {part}</div>
+                        </div>
+
+                        <div class="form-row">
+                            <button id="export-btn" class="btn btn-primary btn-lg">Export to Disk</button>
+                            <button id="export-zip-btn" class="btn btn-lg">Download ZIP</button>
+                        </div>
+
+                        <div id="export-loading" class="loading hidden">
+                            <div class="spinner"></div>
+                            <span>Exporting...</span>
+                        </div>
+
+                        <div id="export-log" class="export-log hidden">
+                            <h3>Export Log</h3>
+                            <ul id="export-log-list"></ul>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Settings Panel -->
+            <section id="panel-settings" class="panel">
+                <div class="panel-header">
+                    <h2>Settings</h2>
+                </div>
+                <div class="settings-content">
+                    <fieldset>
+                        <legend>Pollinations API</legend>
+                        <div class="form-group">
+                            <label for="set-api-key">API Key</label>
+                            <input type="password" id="set-api-key" placeholder="pk_...">
+                        </div>
+                        <div class="form-group">
+                            <label for="set-model">Model</label>
+                            <select id="set-model">
+                                <optgroup label="Free Tier">
+                                    <option value="flux">Flux Schnell (flux) — 1K pollen</option>
+                                    <option value="zimage">Z-Image Turbo (zimage) — 500</option>
+                                    <option value="klein">FLUX.2 Klein 4B (klein) — 100, alpha</option>
+                                    <option value="gptimage">GPT Image 1 Mini (gptimage) — 80</option>
+                                    <option value="qwen-image">Qwen Image Plus (qwen-image) — 35</option>
+                                    <option value="sana">Sana (sana)</option>
+                                    <option value="wan-image">Wan 2.7 Image (wan-image) — 30</option>
+                                    <option value="kontext">FLUX.1 Kontext (kontext) — 25</option>
+                                </optgroup>
+                                <optgroup label="Paid Tier">
+                                    <option value="p-image">Pruna p-image — 200</option>
+                                    <option value="p-image-edit">Pruna p-image-edit — 100</option>
+                                    <option value="grok-imagine">Grok Imagine — 50</option>
+                                    <option value="seedream">Seedream 4.0 — 35</option>
+                                    <option value="seedream5">Seedream 5.0 Lite — 30</option>
+                                    <option value="nanobanana">NanoBanana — 25</option>
+                                    <option value="seedream-pro">Seedream 4.5 Pro — 25</option>
+                                    <option value="nova-canvas">Amazon Nova Canvas — 25</option>
+                                    <option value="wan-image-pro">Wan 2.7 Image Pro — 15</option>
+                                </optgroup>
+                            </select>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group flex-1">
+                                <label for="set-width">Width</label>
+                                <input type="number" id="set-width" value="256">
+                            </div>
+                            <div class="form-group flex-1">
+                                <label for="set-height">Height</label>
+                                <input type="number" id="set-height" value="256">
+                            </div>
+                        </div>
+                    </fieldset>
+
+                    <fieldset>
+                        <legend>Custom Endpoint</legend>
+                        <div class="form-group">
+                            <label for="set-custom-url">URL</label>
+                            <input type="text" id="set-custom-url" placeholder="http://localhost:7860/api/...">
+                        </div>
+                        <div class="form-group">
+                            <label for="set-custom-headers">Headers (JSON)</label>
+                            <textarea id="set-custom-headers" rows="2" placeholder='{"Authorization": "..."}'></textarea>
+                        </div>
+                    </fieldset>
+
+                    <fieldset>
+                        <legend>Style Templates</legend>
+                        <div id="template-list" class="template-list"></div>
+                        <div class="form-row" style="margin-top: 8px;">
+                            <input type="text" id="new-tmpl-name" placeholder="Template name" class="flex-1">
+                            <button id="add-template-btn" class="btn btn-sm">+ Add</button>
+                        </div>
+                        <textarea id="new-tmpl-prompt" rows="2" placeholder="Template prompt..." style="margin-top: 4px;"></textarea>
+                    </fieldset>
+
+                    <button id="save-settings-btn" class="btn btn-primary">Save Settings</button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- New Project Modal -->
+    <div id="new-project-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>New Character Project</h3>
+            <div class="form-group">
+                <label for="project-name-input">Character Name</label>
+                <input type="text" id="project-name-input" placeholder="e.g. Skeleton Warrior">
+            </div>
+            <div class="form-group">
+                <label for="project-desc-input">Description (optional)</label>
+                <textarea id="project-desc-input" rows="2" placeholder="Brief description..."></textarea>
+            </div>
+            <div class="form-row">
+                <button id="modal-create-btn" class="btn btn-primary">Create</button>
+                <button id="modal-cancel-btn" class="btn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
+    <script src="/js/app.js"></script>
+    <script src="/js/generator.js"></script>
+    <script src="/js/segmenter.js"></script>
+    <script src="/js/bodyparts.js"></script>
+    <script src="/js/preview.js"></script>
+    <script src="/js/exporter.js"></script>
+</body>
+</html>

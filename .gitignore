@@ -1,0 +1,9 @@
+node_modules/
+venv/
+projects/*/
+!projects/.gitkeep
+config.json
+exports/
+*.pyc
+__pycache__/
+.DS_Store
