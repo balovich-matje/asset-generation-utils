@@ -13,6 +13,8 @@ const Preview = (() => {
     let pendingTimers = [];
     let playing = false;
     let animGeneration = 0;  // bumped on each playAnimation, guards stale callbacks
+    let customAnimations = [];  // loaded from API
+    let currentCustomAnim = null;  // the active custom animation data
     let speed = 1.0;
     let looping = true;
     let partsManifest = null;
@@ -73,11 +75,23 @@ const Preview = (() => {
     function bindEvents() {
         document.getElementById('anim-preset').addEventListener('change', (e) => {
             currentPreset = e.target.value;
-            resetParamValues(currentPreset);
-            renderParams();
-            if (playing) playAnimation();
-            updateCode();
+            // Check if it's a custom animation (prefixed with "custom:")
+            if (currentPreset.startsWith('custom:')) {
+                const name = currentPreset.slice(7);
+                currentCustomAnim = customAnimations.find(a => a.name === name) || null;
+                renderParams();
+                if (currentCustomAnim) playAnimation();
+                updateCode();
+            } else {
+                currentCustomAnim = null;
+                resetParamValues(currentPreset);
+                renderParams();
+                if (playing) playAnimation();
+                updateCode();
+            }
         });
+
+        document.getElementById('anim-refresh-btn').addEventListener('click', loadCustomAnimations);
 
         document.getElementById('anim-play-btn').addEventListener('click', playAnimation);
         document.getElementById('anim-pause-btn').addEventListener('click', pauseAnimation);
@@ -122,6 +136,22 @@ const Preview = (() => {
     function renderParams() {
         const container = document.getElementById('anim-params');
         container.innerHTML = '';
+
+        // Custom animation — show description + step summary
+        if (currentCustomAnim) {
+            if (currentCustomAnim.description) {
+                const desc = document.createElement('p');
+                desc.style.cssText = 'font-size:12px; color:var(--text-secondary); margin-bottom:8px;';
+                desc.textContent = currentCustomAnim.description;
+                container.appendChild(desc);
+            }
+            const info = document.createElement('div');
+            info.style.cssText = 'font-size:11px; color:var(--text-muted);';
+            info.textContent = `${currentCustomAnim.steps.length} tween steps — targets: ${[...new Set(currentCustomAnim.steps.map(s => s.target))].join(', ')}`;
+            container.appendChild(info);
+            return;
+        }
+
         const def = PRESETS[currentPreset];
         if (!def) return;
 
@@ -172,7 +202,10 @@ const Preview = (() => {
         noParts.classList.add('hidden');
         workspace.classList.remove('hidden');
 
-        // Only reinit if parts changed
+        // Always refresh custom animations list
+        loadCustomAnimations();
+
+        // Only reinit Phaser if parts changed
         const newManifest = project.parts;
         if (game && partsManifest === newManifest) return;
         partsManifest = newManifest;
@@ -180,6 +213,35 @@ const Preview = (() => {
         initGame();
         renderParams();
         updateCode();
+    }
+
+    async function loadCustomAnimations() {
+        const project = App.getProject();
+        if (!project) return;
+
+        try {
+            customAnimations = await App.api('GET', `/projects/${project.id}/animations`);
+        } catch {
+            customAnimations = [];
+        }
+
+        // Populate the custom optgroup in the dropdown
+        const group = document.getElementById('anim-custom-group');
+        group.innerHTML = '';
+        customAnimations.forEach(anim => {
+            const opt = document.createElement('option');
+            opt.value = `custom:${anim.name}`;
+            opt.textContent = `${anim.name}${anim.description ? ' — ' + anim.description : ''}`;
+            group.appendChild(opt);
+        });
+
+        // If currently viewing a custom anim, refresh its data
+        if (currentPreset.startsWith('custom:')) {
+            const name = currentPreset.slice(7);
+            currentCustomAnim = customAnimations.find(a => a.name === name) || null;
+            if (currentCustomAnim && playing) playAnimation();
+            updateCode();
+        }
     }
 
     function destroyGame() {
@@ -282,6 +344,13 @@ const Preview = (() => {
         const repeat = looping ? -1 : 0;
         const p = paramValues;
         const s = speed;
+
+        // Custom animation from API
+        if (currentCustomAnim) {
+            playCustomSteps(currentCustomAnim, s, gen);
+            updateCode();
+            return;
+        }
 
         switch (currentPreset) {
             case 'idle':
@@ -453,6 +522,81 @@ const Preview = (() => {
         updateCode();
     }
 
+    function playCustomSteps(anim, spd, gen) {
+        const steps = anim.steps || [];
+        const animSpeed = (anim.speed || 1) * spd;
+
+        steps.forEach(step => {
+            const sprite = partSprites[step.target];
+            if (!sprite) return;
+
+            const tweenConfig = {
+                targets: sprite,
+                duration: (step.duration || 300) / animSpeed,
+                ease: step.ease || 'Sine.easeInOut',
+                yoyo: step.yoyo || false,
+                repeat: step.repeat !== undefined ? step.repeat : 0,
+                delay: (step.delay || 0) / animSpeed,
+                hold: (step.hold || 0) / animSpeed
+            };
+
+            // Map tween properties
+            if (step.angle !== undefined) {
+                if (typeof step.angle === 'object') {
+                    tweenConfig.angle = step.angle; // { from, to }
+                } else {
+                    tweenConfig.angle = step.angle;
+                }
+            }
+            if (step.x !== undefined) {
+                if (typeof step.x === 'string' && step.x.startsWith('+=')) {
+                    tweenConfig.x = sprite._baseX + parseFloat(step.x.slice(2));
+                } else if (typeof step.x === 'string' && step.x.startsWith('-=')) {
+                    tweenConfig.x = sprite._baseX - parseFloat(step.x.slice(2));
+                } else {
+                    tweenConfig.x = step.x;
+                }
+            }
+            if (step.y !== undefined) {
+                if (typeof step.y === 'string' && step.y.startsWith('+=')) {
+                    tweenConfig.y = sprite._baseY + parseFloat(step.y.slice(2));
+                } else if (typeof step.y === 'string' && step.y.startsWith('-=')) {
+                    tweenConfig.y = sprite._baseY - parseFloat(step.y.slice(2));
+                } else {
+                    tweenConfig.y = step.y;
+                }
+            }
+            if (step.scaleX !== undefined) tweenConfig.scaleX = step.scaleX;
+            if (step.scaleY !== undefined) tweenConfig.scaleY = step.scaleY;
+            if (step.alpha !== undefined) tweenConfig.alpha = step.alpha;
+
+            if (step.tint) {
+                const tintColor = parseInt(step.tint.replace('#', '0x'));
+                sprite.setTint(tintColor);
+                if (step.duration) {
+                    pendingTimers.push(scene.time.delayedCall(tweenConfig.duration, () => {
+                        if (gen !== animGeneration) return;
+                        sprite.clearTint();
+                    }));
+                }
+            }
+
+            scene.tweens.add(tweenConfig);
+        });
+
+        // If looping and no steps have repeat:-1, replay after total duration
+        const hasInfiniteRepeat = steps.some(s => s.repeat === -1);
+        if (anim.loop && !hasInfiniteRepeat && steps.length > 0) {
+            const maxDuration = Math.max(...steps.map(s =>
+                ((s.delay || 0) + (s.duration || 300) * (s.yoyo ? 2 : 1)) / animSpeed
+            ));
+            pendingTimers.push(scene.time.delayedCall(maxDuration + 100, () => {
+                if (gen !== animGeneration) return;
+                if (anim.loop) playAnimation();
+            }));
+        }
+    }
+
     function pauseAnimation() {
         if (!scene) return;
         playing = false;
@@ -483,6 +627,11 @@ const Preview = (() => {
     }
 
     function generateCode() {
+        // Custom animation — generate code from steps
+        if (currentCustomAnim) {
+            return generateCustomCode(currentCustomAnim);
+        }
+
         const p = paramValues;
         const preset = currentPreset;
         const repeat = looping ? -1 : 0;
@@ -591,9 +740,47 @@ const Preview = (() => {
         return lines.join(',\n') + '\n    });\n';
     }
 
+    function generateCustomCode(anim) {
+        const name = anim.name.replace(/[^a-zA-Z0-9]/g, '_');
+        let code = `function create${capitalize(name)}Animation(scene, parts, speed) {\n    speed = speed || 1;\n`;
+
+        for (const step of anim.steps) {
+            const target = `parts.${step.target}`;
+            const props = {};
+            if (step.angle !== undefined) {
+                props.angle = typeof step.angle === 'object'
+                    ? `{ from: ${step.angle.from}, to: ${step.angle.to} }`
+                    : step.angle;
+            }
+            if (step.x !== undefined) {
+                props.x = typeof step.x === 'string'
+                    ? `${target}.x ${step.x.startsWith('-') ? '' : '+'}${step.x.replace('+=', '+ ').replace('-=', '- ')}`
+                    : step.x;
+            }
+            if (step.y !== undefined) {
+                props.y = typeof step.y === 'string'
+                    ? `${target}.y ${step.y.startsWith('-') ? '' : '+'}${step.y.replace('+=', '+ ').replace('-=', '- ')}`
+                    : step.y;
+            }
+            if (step.scaleX !== undefined) props.scaleX = step.scaleX;
+            if (step.scaleY !== undefined) props.scaleY = step.scaleY;
+            if (step.alpha !== undefined) props.alpha = step.alpha;
+            props.duration = `${step.duration || 300} / speed`;
+            if (step.delay) props.delay = `${step.delay} / speed`;
+            if (step.ease) props.ease = `'${step.ease}'`;
+            if (step.yoyo) props.yoyo = true;
+            if (step.repeat !== undefined) props.repeat = step.repeat;
+
+            code += tweenCode(target, props);
+        }
+
+        code += '}';
+        return code;
+    }
+
     function capitalize(s) {
         return s.charAt(0).toUpperCase() + s.slice(1);
     }
 
-    return { init, onActivate, onProjectChange };
+    return { init, onActivate, onProjectChange, loadCustomAnimations };
 })();

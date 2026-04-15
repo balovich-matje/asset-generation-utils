@@ -30,6 +30,7 @@ app.use('/api/projects', require('./routes/projects'));
 app.use('/api/generate', require('./routes/generate'));
 app.use('/api', require('./routes/segment'));
 app.use('/api/export', require('./routes/export'));
+app.use('/api/projects', require('./routes/animations'));
 
 // Start server
 app.listen(PORT, () => {

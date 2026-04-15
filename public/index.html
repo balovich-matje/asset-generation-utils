@@ -188,12 +188,17 @@
                             </div>
                             <div class="anim-transport">
                                 <select id="anim-preset">
-                                    <option value="idle">Idle</option>
-                                    <option value="walk">Walk</option>
-                                    <option value="attack">Attack</option>
-                                    <option value="hit">Hit / Flinch</option>
-                                    <option value="death">Death</option>
+                                    <optgroup label="Presets">
+                                        <option value="idle">Idle</option>
+                                        <option value="walk">Walk</option>
+                                        <option value="attack">Attack</option>
+                                        <option value="hit">Hit / Flinch</option>
+                                        <option value="death">Death</option>
+                                    </optgroup>
+                                    <optgroup label="Custom" id="anim-custom-group">
+                                    </optgroup>
                                 </select>
+                                <button id="anim-refresh-btn" class="btn btn-sm" title="Reload custom animations">&#8635;</button>
                                 <button id="anim-play-btn" class="btn btn-sm btn-primary">Play</button>
                                 <button id="anim-pause-btn" class="btn btn-sm">Pause</button>
                                 <button id="anim-step-btn" class="btn btn-sm">Step</button>
@@ -370,7 +375,7 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
+    <script src="/lib/phaser.min.js"></script>
     <script src="/js/app.js"></script>
     <script src="/js/generator.js"></script>
     <script src="/js/segmenter.js"></script>
