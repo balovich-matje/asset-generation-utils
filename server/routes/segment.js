@@ -216,4 +216,140 @@ router.post('/segment-parts/manual', async (req, res) => {
     }
 });
 
+// POST /api/assemble — create parts manifest from multiple project images
+// This skips auto-segmentation and lets you assign generated/uploaded images as named layers.
+//
+// Body: {
+//   projectId: "...",
+//   layers: [
+//     { name: "body", filename: "gen_42_nobg.png", x: 0, y: 0, scale: 1.0 },
+//     { name: "sword", filename: "gen_100_nobg.png", x: 148, y: 110, scale: 0.35 },
+//     { name: "shield", filename: "gen_200_nobg.png", x: 68, y: 95, scale: 0.30 }
+//   ]
+// }
+router.post('/assemble', async (req, res) => {
+    try {
+        const config = readConfig();
+        const { projectId, layers } = req.body;
+
+        if (!projectId || !layers || !Array.isArray(layers)) {
+            return res.status(400).json({ error: 'projectId and layers[] required' });
+        }
+
+        const projectFile = path.join(projectsDir, projectId, 'project.json');
+        if (!fs.existsSync(projectFile)) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+
+        const partsDir = path.join(projectsDir, projectId, 'parts');
+        fs.mkdirSync(partsDir, { recursive: true });
+
+        let pythonPath = config.pythonPath || 'venv/bin/python';
+        if (!path.isAbsolute(pythonPath)) {
+            pythonPath = path.join(__dirname, '..', '..', pythonPath);
+        }
+
+        const manifest = {
+            parts: {},
+            cuts: {},
+            sourceWidth: 256,
+            sourceHeight: 256,
+            anchorX: 128,
+            anchorY: 128,
+            assembled: true
+        };
+
+        for (const layer of layers) {
+            // Find source image — check generations, project root, and bg-removed variants
+            let srcPath = null;
+            const searchPaths = [
+                path.join(projectsDir, projectId, 'generations', layer.filename),
+                path.join(projectsDir, projectId, layer.filename),
+                path.join(projectsDir, projectId, 'parts', layer.filename)
+            ];
+            for (const p of searchPaths) {
+                if (fs.existsSync(p)) { srcPath = p; break; }
+            }
+
+            if (!srcPath) {
+                return res.status(404).json({ error: `Image not found: ${layer.filename}` });
+            }
+
+            // If scale != 1, resize the image
+            const destFilename = `${layer.name}.png`;
+            const destPath = path.join(partsDir, destFilename);
+
+            if (layer.scale && layer.scale !== 1.0) {
+                // Use Python to resize
+                const scaleScript = `
+from PIL import Image
+img = Image.open("${srcPath}")
+w, h = int(img.width * ${layer.scale}), int(img.height * ${layer.scale})
+img = img.resize((w, h), Image.NEAREST)
+img.save("${destPath}", "PNG")
+print(f"{w} {h}")
+`;
+                const output = await new Promise((resolve, reject) => {
+                    const proc = require('child_process').execFile(
+                        pythonPath, ['-c', scaleScript],
+                        { timeout: 30000 },
+                        (err, stdout, stderr) => {
+                            if (err) reject(new Error(stderr || err.message));
+                            else resolve(stdout.trim());
+                        }
+                    );
+                });
+                const [w, h] = output.split(' ').map(Number);
+                manifest.parts[layer.name] = {
+                    file: destFilename,
+                    x: layer.x || 0,
+                    y: layer.y || 0,
+                    width: w,
+                    height: h
+                };
+            } else {
+                fs.copyFileSync(srcPath, destPath);
+                // Get dimensions
+                const output = await new Promise((resolve, reject) => {
+                    const sizeScript = `from PIL import Image; img=Image.open("${destPath}"); print(f"{img.width} {img.height}")`;
+                    require('child_process').execFile(
+                        pythonPath, ['-c', sizeScript],
+                        { timeout: 10000 },
+                        (err, stdout) => {
+                            if (err) resolve('256 256');
+                            else resolve(stdout.trim());
+                        }
+                    );
+                });
+                const [w, h] = output.split(' ').map(Number);
+                manifest.parts[layer.name] = {
+                    file: destFilename,
+                    x: layer.x || 0,
+                    y: layer.y || 0,
+                    width: w,
+                    height: h
+                };
+            }
+
+            // Add base64 for immediate display
+            const partBuffer = fs.readFileSync(destPath);
+            manifest.parts[layer.name].image = `data:image/png;base64,${partBuffer.toString('base64')}`;
+        }
+
+        // Save manifest
+        fs.writeFileSync(path.join(partsDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
+
+        // Update project
+        const project = JSON.parse(fs.readFileSync(projectFile, 'utf-8'));
+        project.parts = manifest;
+        project.updatedAt = new Date().toISOString();
+        fs.writeFileSync(projectFile, JSON.stringify(project, null, 2));
+
+        res.json({ success: true, ...manifest });
+    } catch (err) {
+        console.error('Assembly error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;
